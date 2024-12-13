@@ -33,6 +33,8 @@ public class MotionStreamer : MonoBehaviour
     public Nt4Source frcDataSink = null;
     private long command = 0;
 
+    [SerializeField] public Transform poseOffset;
+
     [SerializeField] public Transform vrCamera; // The VR camera transform
     [SerializeField] public Transform vrCameraRoot; // The root of the camera transform
     [SerializeField] public Transform resetTransform; // The desired position & rotation (look direction) for your player
@@ -98,6 +100,8 @@ public class MotionStreamer : MonoBehaviour
         frcDataSink.PublishTopic("/oculus/eulerAngles", "float[]");
         frcDataSink.PublishTopic("/oculus/batteryLevel", "double");
         frcDataSink.Subscribe("/oculus/mosi", 0.1, false, false, false);
+        frcDataSink.Subscribe("/oculus/init/position", 0.1, false, false, false);
+        frcDataSink.Subscribe("/oculus/init/eulerAngles", 0.1, false, false, false);
     }
 
     // Publish the Quest pose data to Network Tables
@@ -109,6 +113,12 @@ public class MotionStreamer : MonoBehaviour
         rotation = cameraRig.centerEyeAnchor.rotation;
         eulerAngles = cameraRig.centerEyeAnchor.eulerAngles;
         batteryLevel = SystemInfo.batteryLevel;
+
+        if (poseOffset != null)
+        {
+            position += poseOffset.position;
+            rotation = poseOffset.rotation * rotation;
+        }
 
         frcDataSink.PublishValue("/oculus/frameCount", frameIndex);
         frcDataSink.PublishValue("/oculus/timestamp", timeStamp);
@@ -127,6 +137,11 @@ public class MotionStreamer : MonoBehaviour
             case 1:
                 RecenterPlayer();
                 UnityEngine.Debug.Log("[MotionStreamer] Processed a heading reset request.");
+                frcDataSink.PublishValue("/oculus/miso", 99);
+                break;
+            case 2:
+                InitPose();
+                UnityEngine.Debug.Log("[MotionStreamer] Processed a pose reset request.");
                 frcDataSink.PublishValue("/oculus/miso", 99);
                 break;
             default:
@@ -151,5 +166,16 @@ public class MotionStreamer : MonoBehaviour
         Vector3 distanceDiff = resetTransform.position - vrCamera.position;
         vrCameraRoot.transform.position += distanceDiff;
 
+    }
+
+    void InitPose()
+    {
+        Double[] letpositionArray = frcDataSink.GetDoubleArray("/oculus/init/position");
+        Double [] eulerAnglesArray = frcDataSink.GetDoubleArray("/oculus/init/eulerAngles");
+        
+        poseOffset.position = new Vector3((float)letpositionArray[0], (float)letpositionArray[1], (float)letpositionArray[2]);
+        Quaternion quaternion = new Quaternion((float)eulerAnglesArray[0], (float)eulerAnglesArray[1], (float)eulerAnglesArray[2], (float)eulerAnglesArray[3]);
+        poseOffset.rotation = quaternion;
+                
     }
 }
